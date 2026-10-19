@@ -45,6 +45,21 @@ flowchart LR
 
 See `TIMELINE.md`. Each step runs boringly before the next starts.
 
+## Safe to merge (draft)
+
+A Dependabot bump may merge unattended only when every clause holds. Enforced by
+`evaluateSafeRule` in `packages/kitchen/src/recipes/dependabot-bump/safe-rule.ts`; change both together.
+
+1. Opened by Dependabot, open, not a draft, and bumping exactly one package.
+2. Version change is patch or minor. Caret rules apply, so a 0.x minor counts as major. Prereleases,
+   downgrades, and non-semver versions never qualify.
+3. The local test script ran on the exact head commit and passed. A repo with no test script never qualifies.
+4. CI on that commit reported at least one check, and every check passed, was neutral, or was skipped.
+5. The decision model rated it `safe` with probability ≥ 0.8, and gave a breaking change a probability < 0.2.
+6. The merge is pinned to the verified head commit (`--match-head-commit`).
+
+The merge stage also requires `kitchen run --allow-merge` on that run.
+
 ## Open
 
-- What makes a change "safe" to merge unattended? Decided at timeline step 7.
+- Accept or amend the draft safe rule above (timeline step 7). Should a package allowlist or denylist be added?
