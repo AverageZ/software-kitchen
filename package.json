@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @software-kitchen/kitchen dev",
+    "kitchen": "node packages/kitchen/src/cli.ts",
+    "test": "pnpm -r test",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
