@@ -1,0 +1,10 @@
+node_modules/
+.mastra/
+*.tsbuildinfo
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log

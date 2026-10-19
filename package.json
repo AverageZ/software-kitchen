@@ -1,0 +1,25 @@
+{
+  "name": "software-kitchen",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @software-kitchen/kitchen dev",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "typecheck": "tsc && tsc -p tools && pnpm -r typecheck",
+    "check": "pnpm fmt:check && pnpm lint && pnpm typecheck"
+  },
+  "devDependencies": {
+    "@oxlint/plugins": "1.88.0",
+    "@types/node": "24.19.2",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "packageManager": "pnpm@10.24.0"
+}
