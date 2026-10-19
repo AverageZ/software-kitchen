@@ -21,6 +21,14 @@ pnpm check   # oxfmt --check, oxlint (with anti-slop), tsc
 | `oxlint.config.ts`   | Lint config; every anti-slop rule at `error`.           |
 | `tsconfig.base.json` | Shared compiler options.                                |
 
+## Agent skills
+
+`.agents/skills/` contains the general-purpose skills borrowed from
+`strategy-game`: Git workflow, PR writing, test quality, prose cleanup, issue
+planning (full and lite), issue triage, and instruction review. Testing and
+verification guidance uses this repository's commands and workflow contracts;
+game-specific skills and the game-only Playwright DSL are excluded.
+
 ## TypeScript 7
 
 `tsc` is TypeScript 7 (no JS compiler API). `.pnpmfile.cjs` gives Mastra's
