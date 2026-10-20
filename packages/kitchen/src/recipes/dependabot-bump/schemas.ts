@@ -1,16 +1,22 @@
 import { z } from "zod";
 
-import { checkSchema, prRefSchema, pullRequestSchema } from "../../github/pull-request.ts";
+import {
+  checkSchema,
+  prRefSchema,
+  prUrlSchema,
+  pullRequestSchema,
+} from "../../github/pull-request.ts";
 
 import { bumpSchema } from "./bump.ts";
 
 export const recipeInputSchema = z.object({
-  pr: prRefSchema,
+  url: prUrlSchema,
   /** Merge when the safe rule passes. Off unless the owner opts in per run. */
   allowMerge: z.boolean().default(false),
 });
 
 export const inspectedSchema = recipeInputSchema.extend({
+  pr: prRefSchema,
   pullRequest: pullRequestSchema,
   bump: bumpSchema,
 });

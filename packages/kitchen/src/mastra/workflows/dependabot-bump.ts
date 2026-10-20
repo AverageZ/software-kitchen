@@ -4,7 +4,7 @@ import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 import type { Decider } from "../../decider.ts";
-import type { GitHub } from "../../github/pull-request.ts";
+import { parsePrUrl, type GitHub } from "../../github/pull-request.ts";
 import { parseBumpTitle } from "../../recipes/dependabot-bump/bump.ts";
 import {
   COMMENT_MARKER,
@@ -104,7 +104,11 @@ export function createDependabotBump(deps: RecipeDeps) {
     outputSchema: inspectedSchema,
     retries: RECIPE_LIMITS.retries.inspect,
     execute: async ({ inputData, bail }) => {
-      const pullRequest = await deps.github.getPullRequest(inputData.pr);
+      const pr = parsePrUrl(inputData.url);
+
+      if (pr === null) throw new Error(`Not a GitHub pull request URL: ${inputData.url}`);
+
+      const pullRequest = await deps.github.getPullRequest(pr);
       const bump = parseBumpTitle(pullRequest.title);
       const refusal = RECIPES["dependabot-bump"].ineligibility(pullRequest);
 
@@ -120,7 +124,7 @@ export function createDependabotBump(deps: RecipeDeps) {
         });
       }
 
-      return { ...inputData, pullRequest, bump };
+      return { ...inputData, pr, pullRequest, bump };
     },
   });
 

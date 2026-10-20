@@ -11,7 +11,11 @@ import { LibSQLStore } from "@mastra/libsql";
 import type { Answer, Decider, Question } from "./decider.ts";
 import type { Check, GitHub, PrRef, PullRequest } from "./github/pull-request.ts";
 import { Kitchen } from "./kitchen.ts";
-import { createDependabotBump, RECIPE_LIMITS } from "./mastra/workflows/dependabot-bump.ts";
+import {
+  createDependabotBump,
+  RECIPE_LIMITS,
+  type RecipeRuns,
+} from "./mastra/workflows/dependabot-bump.ts";
 import { KitchenStore } from "./store.ts";
 
 // A local repository stands in for GitHub's: each PR is a commit published at refs/pull/<n>/head.
@@ -136,6 +140,7 @@ let kitchen: Kitchen;
 let now: Date;
 let passingSha: string;
 let failingSha: string;
+let runs: RecipeRuns;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "kitchen-test-"));
@@ -170,13 +175,8 @@ beforeEach(() => {
     logger: false,
   });
   store = new KitchenStore(join(dir, "kitchen.db"));
-  kitchen = new Kitchen({
-    store,
-    github,
-    decider: confidentModel,
-    runs: recipe.runs,
-    now: () => now,
-  });
+  runs = recipe.runs;
+  kitchen = new Kitchen({ store, github, decider: confidentModel, runs, now: () => now });
 });
 
 afterEach(() => {
@@ -285,6 +285,16 @@ test("the router rejects the model's proposal when the PR isn't from Dependabot"
     reason: "dependabot-bump proposed, but opened by octocat, not Dependabot",
   });
   assert.equal(store.listWorkItems().length, 0);
+});
+
+test("a run started with something other than a PR URL is rejected before touching GitHub", async () => {
+  // Studio's input form once received an owner plus a whole URL in the repo field.
+  await assert.rejects(
+    runs.start("bad-input", { url: "https://github.com/octo", allowMerge: true }),
+    /pull request URL/,
+  );
+  assert.deepEqual(github.merges, []);
+  assert.equal(github.comments.size, 0);
 });
 
 test("a run that throws in every attempt is parked, not left running", async () => {

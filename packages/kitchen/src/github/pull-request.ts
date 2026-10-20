@@ -1,14 +1,22 @@
 import { z } from "zod";
 
+const NAME = /^[\w.-]+$/;
+
 export const prRefSchema = z.object({
-  owner: z.string().min(1),
-  repo: z.string().min(1),
+  owner: z.string().regex(NAME),
+  repo: z.string().regex(NAME),
   number: z.number().int().positive(),
 });
 
 export type PrRef = z.infer<typeof prRefSchema>;
 
 const PR_URL = /^https?:\/\/(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/;
+
+/** A pull request URL such as `https://github.com/octo/app/pull/12`; `parsePrUrl` accepts anything this does. */
+export const prUrlSchema = z
+  .string()
+  .trim()
+  .regex(PR_URL, "Expected a GitHub pull request URL, e.g. https://github.com/OWNER/REPO/pull/12");
 
 /** Parses a GitHub pull request URL, tolerating tab suffixes such as `/files`, queries, and fragments. */
 export function parsePrUrl(text: string): PrRef | null {

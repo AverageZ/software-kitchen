@@ -104,7 +104,9 @@ export class Kitchen {
 
     store.markRunning(workItemId, runId);
 
-    return this.#settle(workItem, runId, () => runs.start(runId, { pr: ref, allowMerge }));
+    const url = `https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}`;
+
+    return this.#settle(workItem, runId, () => runs.start(runId, { url, allowMerge }));
   }
 
   /** Resumes every waiting WorkItem whose wake time has passed. Run it from cron or by hand. */
