@@ -19,7 +19,9 @@ One step at a time. Don't start the next step until the current one runs boringl
   - Done when: a failing PR ends up parked, not stuck "running".
 - [ ] **6. Decision stage.** Model rates the bump (structured output). Still no merging; you compare its call to yours.
   - Done when: you've reviewed ~20 calls and trust or reject it.
-  - Built: `clef-flash:9b` rates every bump; review with `kitchen decisions`. Waiting on your ~20 reviews.
+  - Built: `clef-flash:9b` rates every bump; review with `kitchen decisions`, or replay a repo's merged
+    history with `kitchen eval OWNER/REPO` (a merge counts as your "safe"). Waiting on your ~20 reviews and
+    some real unsafe examples: history has almost none.
 - [ ] **7. Define "safe".** Write the rule (semver level, tests, changelog, package allowlist?). Turn on auto-merge for that rule only.
   - Done when: rule is written down and one PR merges unattended.
   - Built: draft rule in `ARCHITECTURE.md`, merge behind `kitchen run --allow-merge`. Waiting on your sign-off and a first merge.

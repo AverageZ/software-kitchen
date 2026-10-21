@@ -37,21 +37,27 @@ export function evaluateSafeRule(evidence: RuleEvidence): RuleResult {
 
   if (ci.status !== "passed") failures.push(`CI ${ci.status}`);
 
-  if (rating === null) {
-    failures.push("no model rating");
-  } else {
-    if (rating.verdict !== "safe" || rating.probabilities.safe < SAFE_PROBABILITY) {
-      failures.push(
-        `model says ${rating.verdict} (safe ${percent(rating.probabilities.safe)} < ${percent(SAFE_PROBABILITY)})`,
-      );
-    }
-
-    if (rating.breaking >= BREAKING_PROBABILITY) {
-      failures.push(`breaking change likely (${percent(rating.breaking)})`);
-    }
-  }
+  if (rating === null) failures.push("no model rating");
+  else failures.push(...modelFailures(rating));
 
   return { safe: failures.length === 0, failures };
+}
+
+/** The rule's model clauses. `kitchen eval` passes other `safeProbability` values to compare thresholds. */
+export function modelFailures(rating: Rating, safeProbability = SAFE_PROBABILITY): string[] {
+  const failures: string[] = [];
+
+  if (rating.verdict !== "safe" || rating.probabilities.safe < safeProbability) {
+    failures.push(
+      `model says ${rating.verdict} (safe ${percent(rating.probabilities.safe)} < ${percent(safeProbability)})`,
+    );
+  }
+
+  if (rating.breaking >= BREAKING_PROBABILITY) {
+    failures.push(`breaking change likely (${percent(rating.breaking)})`);
+  }
+
+  return failures;
 }
 
 export function percent(probability: number): string {

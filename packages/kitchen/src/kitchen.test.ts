@@ -9,7 +9,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore } from "@mastra/libsql";
 
 import type { Answer, Decider, Question } from "./decider.ts";
-import type { Check, GitHub, PrRef, PullRequest } from "./github/pull-request.ts";
+import type { Check, GitHub, PrRef, PullRequest, RepoRef } from "./github/pull-request.ts";
 import { Kitchen } from "./kitchen.ts";
 import {
   createDependabotBump,
@@ -71,6 +71,13 @@ class FakeGitHub implements GitHub {
     if (pr === undefined) throw new Error(`no PR ${ref.number}`);
 
     return pr;
+  }
+
+  async listPullRequests(repo: RepoRef, author: string, limit: number): Promise<PrRef[]> {
+    return [...this.pullRequests.entries()]
+      .filter(([, pr]) => pr.author.login === author)
+      .slice(0, limit)
+      .map(([number]) => ({ ...repo, number }));
   }
 
   async getChecks(_ref: PrRef, sha: string): Promise<Check[]> {

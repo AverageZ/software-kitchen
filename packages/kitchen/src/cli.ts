@@ -3,9 +3,17 @@ import { parseArgs } from "node:util";
 
 import { clefFlash } from "./decider.ts";
 import { ghGitHub } from "./github/gh.ts";
+import { parseRepo } from "./github/pull-request.ts";
 import { kitchenHome } from "./home.ts";
 import { Kitchen } from "./kitchen.ts";
 import { dependabotBump } from "./mastra/index.ts";
+import {
+  EVAL_HEADER,
+  formatCase,
+  formatSummary,
+  replayBumps,
+  type EvalCase,
+} from "./recipes/dependabot-bump/eval.ts";
 import { KitchenStore, type WorkItem } from "./store.ts";
 
 const USAGE = `Usage: kitchen <command>
@@ -17,7 +25,11 @@ const USAGE = `Usage: kitchen <command>
   list                                    Show WorkItems
   decisions                               Show recorded model decisions and your reviews
   decisions review <id> <verdict> [--note <text>]
-                                          Record your own call on a decision`;
+                                          Record your own call on a decision
+  eval <owner/repo> [--limit <n>]         Rate the repo's last n Dependabot bumps (default 50)
+                                          with today's model and prompt, without running anything`;
+
+const DEFAULT_EVAL_LIMIT = 50;
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -25,6 +37,7 @@ const { positionals, values } = parseArgs({
     recipe: { type: "string" },
     "allow-merge": { type: "boolean", default: false },
     note: { type: "string" },
+    limit: { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
 });
@@ -44,6 +57,17 @@ function id(text: string | undefined, what: string): number {
 
   if (!Number.isInteger(value) || value <= 0)
     throw new Error(`Expected a ${what} id, got "${text ?? ""}"`);
+
+  return value;
+}
+
+function limit(text: string | undefined): number {
+  if (text === undefined) return DEFAULT_EVAL_LIMIT;
+
+  const value = Number(text);
+
+  if (!Number.isInteger(value) || value <= 0)
+    throw new Error(`Expected --limit to be a positive integer, got "${text}"`);
 
   return value;
 }
@@ -120,6 +144,30 @@ async function main(): Promise<void> {
 
       printDecisions();
       break;
+    case "eval": {
+      const repo = parseRepo(args[0] ?? "");
+
+      if (repo === null)
+        throw new Error("Give a repository as owner/repo, e.g. `kitchen eval octo/app`");
+
+      const count = limit(values.limit);
+      const cases: EvalCase[] = [];
+
+      console.log(EVAL_HEADER);
+
+      for await (const evalCase of replayBumps(ghGitHub, clefFlash, repo, count)) {
+        cases.push(evalCase);
+        console.log(formatCase(evalCase));
+      }
+
+      console.log(
+        cases.length === 0
+          ? `No single-package Dependabot bumps in ${repo.owner}/${repo.repo}.`
+          : `\n${formatSummary(cases)}`,
+      );
+      break;
+    }
+
     default:
       console.log(USAGE);
       process.exitCode = command === undefined || values.help ? 0 : 1;

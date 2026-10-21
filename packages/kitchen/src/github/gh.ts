@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { runChecked } from "../exec.ts";
 
-import type { Check, GitHub, PrRef, PullRequest } from "./pull-request.ts";
+import type { Check, GitHub, PrRef, PullRequest, RepoRef } from "./pull-request.ts";
 
 const GH_TIMEOUT_MS = 30_000;
 
@@ -81,6 +81,26 @@ export const ghGitHub: GitHub = {
       headSha: view.headRefOid,
       labels: view.labels.map((label) => label.name),
     };
+  },
+
+  async listPullRequests(repo: RepoRef, author: string, limit: number): Promise<PrRef[]> {
+    // Numbers only: bodies for a long history overflow the captured output, so callers fetch each PR.
+    const listed = await ghJson(z.array(z.object({ number: z.number() })), [
+      "pr",
+      "list",
+      "-R",
+      `${repo.owner}/${repo.repo}`,
+      "--author",
+      author,
+      "--state",
+      "all",
+      "--limit",
+      String(limit),
+      "--json",
+      "number",
+    ]);
+
+    return listed.map(({ number }) => ({ ...repo, number }));
   },
 
   async getChecks(ref: PrRef, sha: string): Promise<Check[]> {

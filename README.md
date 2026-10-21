@@ -25,10 +25,16 @@ pnpm -s kitchen tick                           # resume runs waiting on CI; run 
 pnpm -s kitchen list                           # WorkItems with status, reason, next action
 pnpm -s kitchen decisions                      # model calls, for comparing with yours
 pnpm -s kitchen decisions review 2 safe --note "agree"
+pnpm -s kitchen eval OWNER/REPO --limit 50     # replay past Dependabot bumps through the model
 ```
 
 `kitchen run --allow-merge` lets the run merge, but only when the draft safe rule in
 `ARCHITECTURE.md` passes. Without the flag the recipe never merges.
+
+`kitchen eval` re-rates a repository's past single-package Dependabot bumps with the current prompt
+and model, as if tests and CI passed, and counts how many pass the rule's model clauses at several
+`safe` thresholds, split by merged, closed, and open. It changes nothing on GitHub and stores nothing;
+run it before and after editing `rate.ts` or the thresholds in `safe-rule.ts`.
 
 State lives in `~/.software-kitchen` (override with `KITCHEN_HOME`): `kitchen.db` holds Inputs,
 WorkItems, and decisions; `mastra.db` holds runs, shared with Studio; `work/` holds per-run checkouts,

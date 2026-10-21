@@ -10,6 +10,24 @@ export const prRefSchema = z.object({
 
 export type PrRef = z.infer<typeof prRefSchema>;
 
+/** A repository, e.g. `octo/app`. */
+export type RepoRef = Pick<PrRef, "owner" | "repo">;
+
+const REPO = /^([\w.-]+)\/([\w.-]+)$/;
+
+/** Parses `owner/repo`. */
+export function parseRepo(text: string): RepoRef | null {
+  const match = REPO.exec(text.trim());
+
+  if (match === null) return null;
+
+  const [, owner, repo] = match;
+
+  if (owner === undefined || repo === undefined) return null;
+
+  return { owner, repo };
+}
+
 const PR_URL = /^https?:\/\/(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/;
 
 /** A pull request URL such as `https://github.com/octo/app/pull/12`; `parsePrUrl` accepts anything this does. */
@@ -59,6 +77,8 @@ export type Check = z.infer<typeof checkSchema>;
 /** Everything the kitchen does to GitHub. One interface so recipes can run against a fake in tests. */
 export interface GitHub {
   getPullRequest(ref: PrRef): Promise<PullRequest>;
+  /** Up to `limit` pull requests opened by `author`, in any state, newest first. */
+  listPullRequests(repo: RepoRef, author: string, limit: number): Promise<PrRef[]>;
   /** Checks and commit statuses reported for one commit. */
   getChecks(ref: PrRef, sha: string): Promise<Check[]>;
   /** Git URL to clone; the PR head is fetched from `refs/pull/<n>/head`. */
