@@ -1,79 +1,77 @@
 import { z } from "zod";
 
-import {
-  checkSchema,
-  prRefSchema,
-  prUrlSchema,
-  pullRequestSchema,
-} from "../../github/pull-request.ts";
+import { prRefSchema, prUrlSchema, pullRequestSchema } from "../../forge/forge.ts";
+import { assessmentInputSchema, safetyAssessmentSchema } from "../../safety/assessment.ts";
+import { evidenceBundleSchema, testsSchema } from "../../safety/evidence.ts";
+import { policySchema } from "../../safety/policy.ts";
 
 import { bumpSchema } from "./bump.ts";
 
-export const recipeInputSchema = z.object({
-  url: prUrlSchema,
-  /** Merge when the safe rule passes. Off unless the owner opts in per run. */
-  allowMerge: z.boolean().default(false),
-});
+const items = evidenceBundleSchema.shape;
+
+export const recipeInputSchema = z.object({ url: prUrlSchema });
 
 export const inspectedSchema = recipeInputSchema.extend({
   pr: prRefSchema,
   pullRequest: pullRequestSchema,
   bump: bumpSchema,
+  /** The repository's resolved safety policy, fixed for the whole run. */
+  policy: policySchema,
 });
 
-export const testsSchema = z.object({
-  status: z.enum(["passed", "failed", "install-failed", "timed-out", "no-tests", "unsupported"]),
-  /** The command whose result `status` reports, e.g. `pnpm test`. */
-  command: z.string().nullable(),
-  /** Last lines of that command's output. */
-  log: z.string(),
+/** Evidence gathered without running any of the PR's code. */
+export const collectedSchema = inspectedSchema.extend({
+  evidence: z.strictObject({
+    pullRequest: items.pullRequest,
+    changes: items.changes,
+    registry: items.registry,
+    advisories: items.advisories,
+    repoPolicy: items.repoPolicy,
+    releaseNotes: items.releaseNotes,
+  }),
 });
 
-export type Tests = z.infer<typeof testsSchema>;
-
-export const verifiedSchema = inspectedSchema.extend({ tests: testsSchema });
-
-export const ciSchema = z.object({
-  status: z.enum(["passed", "failed", "none", "timed-out", "skipped"]),
-  checks: z.array(checkSchema),
+export const verifiedSchema = collectedSchema.extend({
+  /** Null when the policy turns local tests off. */
+  tests: testsSchema.nullable(),
+  localTests: items.localTests,
+  artifacts: items.artifacts,
 });
 
-export type Ci = z.infer<typeof ciSchema>;
+export const ciCheckedSchema = verifiedSchema.extend({ checks: items.checks });
 
-export const ciCheckedSchema = verifiedSchema.extend({ ci: ciSchema });
-
-export const ratingSchema = z.object({
+/** The model call as recorded for the owner to review in `kitchen decisions`. */
+export const modelCallSchema = z.object({
   model: z.string(),
-  verdict: z.enum(["safe", "review", "unsafe"]),
-  /** Probability of each verdict. */
-  probabilities: z.object({ safe: z.number(), review: z.number(), unsafe: z.number() }),
+  verdict: z.string(),
   confidence: z.number(),
-  /** Probability that the release notes describe a breaking change. */
-  breaking: z.number(),
+  answers: z.string(),
 });
 
-export type Rating = z.infer<typeof ratingSchema>;
+export type ModelCallRecord = z.infer<typeof modelCallSchema>;
 
-export const ratedSchema = ciCheckedSchema.extend({ rating: ratingSchema.nullable() });
-
-export const ruleResultSchema = z.object({
-  safe: z.boolean(),
-  /** Every clause of the rule that failed; empty when `safe`. */
-  failures: z.array(z.string()),
+export const analyzedSchema = ciCheckedSchema.extend({
+  analysis: items.analysis,
+  modelCall: modelCallSchema.nullable(),
 });
 
-export type RuleResult = z.infer<typeof ruleResultSchema>;
-
-export const judgedSchema = ratedSchema.extend({ rule: ruleResultSchema });
+export const assessedSchema = analyzedSchema.extend({
+  input: assessmentInputSchema,
+  assessment: safetyAssessmentSchema,
+});
 
 export const outcomeSchema = z.object({
-  status: z.enum(["done", "parked"]),
+  /** `deferred`: a temporary condition; the kitchen runs the recipe again at `retryAt`. */
+  status: z.enum(["done", "parked", "deferred"]),
   reason: z.string().nullable(),
   nextAction: z.string().nullable(),
+  retryAt: z.string().nullable(),
   commentUrl: z.string().nullable(),
-  merged: z.boolean(),
   subject: z.string(),
-  rating: ratingSchema.nullable(),
+  /** Null when the run stopped before assessing (not a single-package bump). */
+  input: assessmentInputSchema.nullable(),
+  assessment: safetyAssessmentSchema.nullable(),
+  modelCall: modelCallSchema.nullable(),
 });
 
 export type Outcome = z.infer<typeof outcomeSchema>;

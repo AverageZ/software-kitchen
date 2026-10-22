@@ -1,6 +1,6 @@
 import { choiceAnswer, type Decider, type Question } from "./decider.ts";
-import { isDependabot, type PrRef, type PullRequest } from "./github/pull-request.ts";
-import { parseBumpTitle, type BumpLevel } from "./recipes/dependabot-bump/bump.ts";
+import { repoSlug, type PrRef, type PullRequest } from "./forge/forge.ts";
+import { parseBump, type BumpLevel } from "./recipes/dependabot-bump/bump.ts";
 
 const RISK_BY_LEVEL = {
   patch: "low",
@@ -22,18 +22,18 @@ export interface Recipe {
 export const RECIPES = {
   "dependabot-bump": {
     description:
-      "A Dependabot pull request that bumps a single dependency version: verify it, rate it, and report on the PR",
+      "A Dependabot or Renovate pull request that bumps a single dependency version: collect evidence, assess it against the safety policy, and report on the PR",
     ineligibility(pr: PullRequest): string | null {
-      if (!isDependabot(pr)) return `opened by ${pr.author.login}, not Dependabot`;
+      if (!pr.author.dependencyBot) return `opened by ${pr.author.login}, not a dependency bot`;
 
       if (pr.state !== "OPEN") return `PR is ${pr.state.toLowerCase()}`;
 
-      if (parseBumpTitle(pr.title) === null) return "title isn't a single-package bump";
+      if (parseBump(pr.title, pr.body) === null) return "not a single-package bump";
 
       return null;
     },
     risk(pr: PullRequest): string {
-      return RISK_BY_LEVEL[parseBumpTitle(pr.title)?.level ?? "unknown"];
+      return RISK_BY_LEVEL[parseBump(pr.title, pr.body)?.level ?? "unknown"];
     },
   },
 } satisfies Record<string, Recipe>;
@@ -63,8 +63,8 @@ export function triageQuestions() {
 /** Context assembly for triage: what the model sees about a pull request. */
 export function triageState(ref: PrRef, pr: PullRequest): string {
   return JSON.stringify({
-    kind: "GitHub pull request",
-    repository: `${ref.owner}/${ref.repo}`,
+    kind: "pull request",
+    repository: repoSlug(ref),
     title: pr.title,
     author: pr.author.login,
     authorIsBot: pr.author.isBot,

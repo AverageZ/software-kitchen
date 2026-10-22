@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import type { Decider } from "./decider.ts";
-import { parsePrUrl, prSlug, type GitHub, type PrRef } from "./github/pull-request.ts";
+import { parsePrUrl, prSlug, prUrl, repoSlug, type Forge, type PrRef } from "./forge/forge.ts";
 import type { RecipeRunResult, RecipeRuns } from "./mastra/workflows/dependabot-bump.ts";
 import { isRecipeName, route, triage } from "./routing.ts";
 import type { AddedInput, AddedWorkItem, Input, KitchenStore, WorkItem } from "./store.ts";
 
 export interface KitchenDeps {
   store: KitchenStore;
-  github: GitHub;
+  forge: Forge;
   decider: Decider;
   /** Runs of the `dependabot-bump` recipe, the only recipe so far. */
   runs: RecipeRuns;
@@ -25,6 +25,9 @@ interface PrInput {
 const INSPECT_RUN =
   "Inspect the run in Mastra Studio (`pnpm dev`), then rerun it with `kitchen run`";
 
+/** Consecutive DEFER assessments after which a WorkItem parks instead of deferring again. */
+export const MAX_DEFERRALS = 5;
+
 /** Intake, WorkItems, and run bookkeeping. Recipes do the work; this records where each item stands. */
 export class Kitchen {
   readonly #deps: KitchenDeps;
@@ -37,13 +40,17 @@ export class Kitchen {
   intake(raw: string): AddedInput {
     const ref = parsePrUrl(raw);
 
-    if (ref === null) throw new Error(`Not a GitHub pull request URL: ${raw}`);
+    if (ref === null) {
+      throw new Error(
+        `Not a pull request URL (…/OWNER/REPO/pull/N or …/GROUP/PROJECT/-/merge_requests/N): ${raw}`,
+      );
+    }
 
     return this.#deps.store.addInput({
       source: "cli",
-      kind: "github-pr",
+      kind: "pull-request",
       raw,
-      key: `github-pr:${prSlug(ref)}`,
+      key: `pull-request:${prSlug(ref)}`,
     });
   }
 
@@ -52,9 +59,9 @@ export class Kitchen {
    * recipe and the router's rules accept or reject the proposal.
    */
   async createWorkItem(inputId: number, recipe: string | null): Promise<WorkItemResult> {
-    const { store, github, decider } = this.#deps;
+    const { store, forge, decider } = this.#deps;
     const { input, ref } = this.#input(inputId);
-    const scope = { inputId, repo: `${ref.owner}/${ref.repo}`, scope: prSlug(ref) };
+    const scope = { inputId, repo: repoSlug(ref), scope: prSlug(ref) };
 
     if (recipe !== null) {
       if (!isRecipeName(recipe)) throw new Error(`Unknown recipe "${recipe}"`);
@@ -62,7 +69,7 @@ export class Kitchen {
       return { routed: true, ...store.addWorkItem({ ...scope, recipe, risk: null }) };
     }
 
-    const pr = await github.getPullRequest(ref);
+    const pr = await forge.getPullRequest(ref);
     const proposal = await triage(decider, ref, pr);
 
     store.addDecision({
@@ -87,8 +94,8 @@ export class Kitchen {
   }
 
   /** Starts a new run of the WorkItem's recipe and records how it ended: done, waiting, or parked. */
-  async run(workItemId: number, allowMerge: boolean): Promise<WorkItem> {
-    const { store, runs } = this.#deps;
+  async run(workItemId: number): Promise<WorkItem> {
+    const { store } = this.#deps;
     const workItem = store.getWorkItem(workItemId);
 
     if (workItem === null) throw new Error(`No WorkItem ${workItemId}`);
@@ -99,17 +106,13 @@ export class Kitchen {
       );
     }
 
-    const { ref } = this.#input(workItem.inputId);
-    const runId = randomUUID();
-
-    store.markRunning(workItemId, runId);
-
-    const url = `https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}`;
-
-    return this.#settle(workItem, runId, () => runs.start(runId, { url, allowMerge }));
+    return this.#start(workItem);
   }
 
-  /** Resumes every waiting WorkItem whose wake time has passed. Run it from cron or by hand. */
+  /**
+   * Wakes every waiting WorkItem whose time has come: resumes runs waiting on CI and starts fresh
+   * runs for deferred ones. Run it from cron or by hand.
+   */
   async tick(): Promise<WorkItem[]> {
     const { store, runs } = this.#deps;
     const settled: WorkItem[] = [];
@@ -117,13 +120,25 @@ export class Kitchen {
     for (const workItem of store.listDue(this.#deps.now())) {
       const { runId } = workItem;
 
-      if (runId === null) continue;
+      if (workItem.wakeAction === "rerun" || runId === null) {
+        settled.push(await this.#start(workItem));
+        continue;
+      }
 
       store.markRunning(workItem.id, runId);
       settled.push(await this.#settle(workItem, runId, () => runs.resume(runId)));
     }
 
     return settled;
+  }
+
+  async #start(workItem: WorkItem): Promise<WorkItem> {
+    const { ref } = this.#input(workItem.inputId);
+    const runId = randomUUID();
+
+    this.#deps.store.markRunning(workItem.id, runId);
+
+    return this.#settle(workItem, runId, () => this.#deps.runs.start(runId, { url: prUrl(ref) }));
   }
 
   async #settle(
@@ -145,28 +160,66 @@ export class Kitchen {
       case "finished": {
         const { outcome } = result;
 
-        if (outcome.rating !== null) {
+        if (outcome.modelCall !== null) {
           store.addDecision({
-            kind: "bump-rating",
+            kind: "release-notes",
             inputId: workItem.inputId,
             runId,
-            model: outcome.rating.model,
+            model: outcome.modelCall.model,
             subject: `${workItem.scope} ${outcome.subject}`,
-            verdict: outcome.rating.verdict,
-            confidence: outcome.rating.confidence,
-            answers: JSON.stringify(outcome.rating),
+            verdict: outcome.modelCall.verdict,
+            confidence: outcome.modelCall.confidence,
+            answers: outcome.modelCall.answers,
           });
         }
 
-        if (outcome.status === "done") {
-          store.markDone(workItem.id, outcome.commentUrl);
-        } else {
-          store.markParked(
-            workItem.id,
-            outcome.reason ?? "parked",
-            outcome.nextAction ?? INSPECT_RUN,
-            outcome.commentUrl,
-          );
+        if (outcome.input !== null && outcome.assessment !== null) {
+          store.addAssessment({
+            workItemId: workItem.id,
+            runId,
+            source: "run",
+            repo: workItem.repo,
+            scope: workItem.scope,
+            input: outcome.input,
+            assessment: outcome.assessment,
+          });
+        }
+
+        switch (outcome.status) {
+          case "done":
+            store.markDone(workItem.id, outcome.commentUrl);
+            break;
+          case "deferred": {
+            const reason = `deferred: ${outcome.reason ?? "a temporary condition"}`;
+            const deferrals = store.recentDecisions(workItem.id, MAX_DEFERRALS);
+
+            if (deferrals.length === MAX_DEFERRALS && deferrals.every((d) => d === "DEFER")) {
+              store.markParked(
+                workItem.id,
+                `${reason} (${MAX_DEFERRALS} times in a row)`,
+                "Check why the condition never clears, then rerun with `kitchen run`",
+                outcome.commentUrl,
+              );
+              break;
+            }
+
+            store.markWaiting(
+              workItem.id,
+              outcome.retryAt ?? this.#deps.now().toISOString(),
+              "rerun",
+              reason,
+            );
+            break;
+          }
+
+          case "parked":
+            store.markParked(
+              workItem.id,
+              outcome.reason ?? "parked",
+              outcome.nextAction ?? INSPECT_RUN,
+              outcome.commentUrl,
+            );
+            break;
         }
 
         break;
@@ -176,6 +229,7 @@ export class Kitchen {
         store.markWaiting(
           workItem.id,
           result.wakeAt,
+          "resume",
           `waiting for CI: ${result.pending.join(", ")}`,
         );
         break;

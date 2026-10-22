@@ -19,12 +19,22 @@ One step at a time. Don't start the next step until the current one runs boringl
   - Done when: a failing PR ends up parked, not stuck "running".
 - [ ] **6. Decision stage.** Model rates the bump (structured output). Still no merging; you compare its call to yours.
   - Done when: you've reviewed ~20 calls and trust or reject it.
-  - Built: `clef-flash:9b` rates every bump; review with `kitchen decisions`, or replay a repo's merged
-    history with `kitchen eval OWNER/REPO` (a merge counts as your "safe"). Waiting on your ~20 reviews and
-    some real unsafe examples: history has almost none.
+  - Built, then narrowed: the model no longer rates bumps. It reads release notes and picks rubric
+    criteria (`kitchen decisions` lists each reading for your review); the evaluator decides what
+    they're worth, and only if they cite collected evidence. Waiting on your reviews of those readings.
 - [ ] **7. Define "safe".** Write the rule (semver level, tests, changelog, package allowlist?). Turn on auto-merge for that rule only.
   - Done when: rule is written down and one PR merges unattended.
-  - Built: draft rule in `ARCHITECTURE.md`, merge behind `kitchen run --allow-merge`. Waiting on your sign-off and a first merge.
+  - Built: the safety assessment in `ARCHITECTURE.md` (hard gates, deduction rubric, evidence
+    completeness, versioned policy), observation mode by default, `kitchen merge` as a separate
+    GitHub App behind a per-repo `autonomous` policy. Waiting on: `kitchen eval` on your repos to
+    calibrate, a merge app, and a first unattended merge.
+
+- [ ] **7a. More sources.** The same recipe handles GitHub Enterprise PRs and GitLab MRs, and Renovate PRs
+      as well as Dependabot's.
+  - Done when: one work GHES PR and one work GitLab MR each get a correct comment.
+  - Built: the host comes from the URL (`gh`/`glab` logins, no host config); bot logins per host in
+    `config.json`. GitLab MRs and Dependabot PRs are assessed but ineligible for unattended merging
+    under the default policy, which starts with Renovate on GitHub. Waiting on runs against work hosts.
 
 ## Phase 3: Routing
 
