@@ -117,6 +117,7 @@ test("registry evidence maps both versions, the previous release, and the added 
       locked("picomatch", "4.0.3"),
       locked("@esbuild/darwin-arm64", "0.25.9"),
     ],
+    removed: [],
   });
 
   assert.ok(requested.includes("/@esbuild%2Fdarwin-arm64"), "scoped names are encoded");
@@ -156,6 +157,7 @@ test("registry evidence maps both versions, the previous release, and the added 
       integrity: "sha512-@esbuild/darwin-arm64",
       dependencies: {},
       optionalDependencies: {},
+      replaced: [],
     },
     {
       name: "picomatch",
@@ -165,6 +167,7 @@ test("registry evidence maps both versions, the previous release, and the added 
       integrity: "sha512-picomatch",
       dependencies: {},
       optionalDependencies: {},
+      replaced: [],
     },
   ]);
   assert.equal(evidence.transitiveComplete, true);
@@ -181,6 +184,7 @@ test("unknown packages are null and incomplete; registry failures throw", async 
     from: "7.1.2",
     to: "7.1.3",
     added: [locked("ghost", "1.0.0")],
+    removed: [],
   });
 
   assert.equal(evidence.from, null);
@@ -209,6 +213,7 @@ test("at most TRANSITIVE_LIMIT added packages are looked up", async () => {
     from: "7.1.2",
     to: "7.1.3",
     added,
+    removed: [],
   });
 
   assert.equal(evidence.transitive.length, TRANSITIVE_LIMIT);

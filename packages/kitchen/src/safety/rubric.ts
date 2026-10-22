@@ -159,31 +159,31 @@ function rangeIn(map: Record<string, string>, name: string): string | undefined 
   return Object.hasOwn(map, name) ? map[name] : undefined;
 }
 
-/** Packages the new version newly declares or re-ranges: lockfile additions they can explain. */
-function redeclared(from: VersionInfo, to: VersionInfo): Set<string> {
-  const names = new Set<string>();
-
-  for (const declared of [to.dependencies, to.optionalDependencies])
-    for (const [name, range] of Object.entries(declared))
-      if ((rangeIn(from.dependencies, name) ?? rangeIn(from.optionalDependencies, name)) !== range)
-        names.add(name);
-
-  return names;
-}
-
 /**
- * Lockfile additions the update accounts for: what the new version re-declares, then, transitively,
- * what each explained addition declares in a range its added version satisfies. A new rolldown
- * pulled in by a new vite explains rolldown's new platform bindings; an addition nothing in that
- * chain declares stays unexplained. Additions the registry wasn't asked about can't explain others.
+ * Lockfile additions the update accounts for: what the new version declares in a range the added
+ * version satisfies, then, transitively, what each explained addition declares the same way. A
+ * bump re-resolves the new version's whole subtree, so an unchanged range still explains a newer
+ * version inside it. A new rolldown pulled in by a new vite explains rolldown's new platform
+ * bindings; an addition nothing in that chain declares stays unexplained. Additions the registry
+ * wasn't asked about can't explain others.
  */
 function explainedAdditions(
-  roots: ReadonlySet<string>,
+  to: VersionInfo,
   added: readonly LockedPackage[],
   registry: RegistryEvidence,
 ): Set<string> {
-  const explainedNames = new Set(roots);
+  const explainedNames = new Set<string>();
   const explained = new Set<string>();
+
+  const declare = (declarer: Pick<VersionInfo, "dependencies" | "optionalDependencies">): void => {
+    for (const declared of [declarer.dependencies, declarer.optionalDependencies])
+      for (const [name, range] of Object.entries(declared))
+        if (added.some((other) => other.name === name && satisfiesRange(other.version, range)))
+          explainedNames.add(name);
+  };
+
+  declare(to);
+
   let grew = true;
 
   while (grew) {
@@ -201,12 +201,7 @@ function explainedAdditions(
         (lookup) => lookup.name === entry.name && lookup.version === entry.version,
       );
 
-      if (declarer === undefined) continue;
-
-      for (const declared of [declarer.dependencies, declarer.optionalDependencies])
-        for (const [name, range] of Object.entries(declared))
-          if (added.some((other) => other.name === name && satisfiesRange(other.version, range)))
-            explainedNames.add(name);
+      if (declarer !== undefined) declare(declarer);
     }
   }
 
@@ -244,7 +239,7 @@ function graphFindings(context: EvaluationContext): DimensionResult {
     ),
   );
 
-  const explained = explainedAdditions(redeclared(registry.from, registry.to), added, registry);
+  const explained = explainedAdditions(registry.to, added, registry);
   const unexplained = new Set<string>();
 
   for (const entry of added) {

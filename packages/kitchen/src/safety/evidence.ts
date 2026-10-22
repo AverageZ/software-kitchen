@@ -206,6 +206,19 @@ export const registryEvidenceSchema = z.strictObject({
       /** What this version declares, so the evaluator can trace why the lockfile pulled in others. */
       dependencies: z.record(z.string(), z.string()),
       optionalDependencies: z.record(z.string(), z.string()),
+      /**
+       * Versions of this package the lockfile removes: their install behavior is the baseline, so
+       * a script they already ran isn't new. Absent in evidence stored before it was collected.
+       */
+      replaced: z
+        .array(
+          z.strictObject({
+            version: z.string(),
+            installScripts: z.record(z.string(), z.string()),
+            gypfile: z.boolean(),
+          }),
+        )
+        .default([]),
     }),
   ),
   /** False when some added packages weren't looked up (too many, or not found). */

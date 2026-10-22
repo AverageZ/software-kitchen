@@ -116,7 +116,9 @@ export async function collectEvidence(
   ]);
 
   const registryUrl = policy.safety.registry;
-  const added = changes.status === "ok" ? changes.data.lockfiles.flatMap((lock) => lock.added) : [];
+  const lockfiles = changes.status === "ok" ? changes.data.lockfiles : [];
+  const added = lockfiles.flatMap((lock) => lock.added);
+  const removed = lockfiles.flatMap((lock) => lock.removed);
   const sources = deps.advisories(registryUrl);
   const registryMeta = { id: "registry", source: registryUrl, sha: null };
 
@@ -144,6 +146,7 @@ export async function collectEvidence(
             from: bump.from,
             to: bump.to,
             added,
+            removed,
           });
 
           // Without the lockfile changes the added packages are unknown, so none were checked.

@@ -95,6 +95,8 @@ export interface TransitiveLookup {
   version: string;
   /** Null when the registry doesn't have the package. */
   packument: Packument | null;
+  /** Versions of the same package the lockfile removes. */
+  replaces: readonly string[];
 }
 
 /** The scripts npm runs when installing a package. */
@@ -195,6 +197,13 @@ export function registryEvidence(facts: RegistryFacts): RegistryEvidence {
       integrity: info.integrity,
       dependencies: info.dependencies,
       optionalDependencies: info.optionalDependencies,
+      replaced: lookup.replaces.flatMap((version) => {
+        const previous = versionInfo(lookup.packument, version);
+
+        return previous === null
+          ? []
+          : [{ version, installScripts: previous.installScripts, gypfile: previous.gypfile }];
+      }),
     });
   }
 
@@ -209,12 +218,13 @@ export function registryEvidence(facts: RegistryFacts): RegistryEvidence {
   };
 }
 
-/** The update being looked up: package and versions from the PR, added packages from its lockfiles. */
+/** The update being looked up: package and versions from the PR, lockfile changes from its lockfiles. */
 export interface RegistryQuery {
   package: string;
   from: string;
   to: string;
   added: readonly LockedPackage[];
+  removed: readonly LockedPackage[];
 }
 
 /**
@@ -251,6 +261,13 @@ export async function collectRegistry(
       name: locked.name,
       version: locked.version,
       packument: packuments.get(locked.name) ?? null,
+      replaces: [
+        ...new Set(
+          query.removed.flatMap((removed) =>
+            removed.name === locked.name ? [removed.version] : [],
+          ),
+        ),
+      ],
     })),
     transitiveComplete: sorted.length <= TRANSITIVE_LIMIT,
   });

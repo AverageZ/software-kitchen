@@ -322,6 +322,7 @@ function addTransitive(
     integrity: `sha512-${name}`,
     dependencies: declares,
     optionalDependencies: {},
+    replaced: [],
   });
   fixture.advisories.checked.push(`${name}@1.0.0`);
 }
@@ -597,6 +598,64 @@ test("a declared range the added version doesn't satisfy explains nothing", () =
   const graph = assess(fixture.input).findings.find((finding) => finding.dimension === "graph");
 
   assert.match(graph?.explanation ?? "", /foo-binding@1\.0\.0/);
+});
+
+test("a dependency re-resolved inside an unchanged range is explained, and so is what it declares", () => {
+  const fixture = safeFixture();
+
+  addTransitive(fixture, "foo-core", { "foo-core-darwin-arm64": "1.0.0" });
+  addTransitive(fixture, "foo-core-darwin-arm64");
+  fixture.from.dependencies = { "foo-core": "^1.0.0" };
+  fixture.to.dependencies = { "foo-core": "^1.0.0" };
+
+  const assessment = assess(fixture.input);
+
+  assert.ok(criteria(assessment).includes("graph.expected"));
+  assert.equal(assessment.decision, "AUTO_MERGE");
+});
+
+test("a transitive install script is new only if the version it replaces didn't run the same one", () => {
+  const addInstaller = (fixture: Fixture, previous: Record<string, string>): void => {
+    addTransitive(fixture, "foo-core");
+    fixture.to.dependencies = { "foo-core": "^1.0.0" };
+
+    const [lockedEntry] = fixture.lockfile.added.slice(-1);
+    const [registryEntry] = fixture.registry.transitive.slice(-1);
+
+    if (lockedEntry === undefined || registryEntry === undefined) throw new Error("no transitive");
+
+    lockedEntry.hasInstallScript = true;
+    registryEntry.installScripts = { postinstall: "node postinstall.js" };
+    registryEntry.replaced = [{ version: "0.9.0", installScripts: previous, gypfile: false }];
+    fixture.lockfile.removed.push({
+      name: "foo-core",
+      version: "0.9.0",
+      integrity: "sha512-foo-core-0.9.0",
+      resolved: null,
+      hasInstallScript: Object.keys(previous).length > 0,
+    });
+  };
+
+  const unchanged = safeFixture();
+
+  addInstaller(unchanged, { postinstall: "node postinstall.js" });
+  assert.equal(gate(assess(unchanged.input), "install-behavior").status, "PASS");
+
+  const changed = safeFixture();
+
+  addInstaller(changed, { postinstall: "node old-postinstall.js" });
+  assert.equal(gate(assess(changed.input), "install-behavior").status, "FAIL");
+
+  const added = safeFixture();
+
+  addInstaller(added, {});
+
+  const reasons = gate(assess(added.input), "install-behavior").reasons;
+
+  assert.ok(reasons.some((reason) => /adds foo-core@1\.0\.0, which runs code/.test(reason)));
+  assert.ok(
+    reasons.some((reason) => /adds foo-core@1\.0\.0, which has an install script/.test(reason)),
+  );
 });
 
 test("missing release metadata is insufficient evidence, never a pass", () => {

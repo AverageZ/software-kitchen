@@ -565,14 +565,23 @@ function transitiveInstallProblems(
 ): Problem[] {
   const problems: Problem[] = [];
 
-  for (const transitive of registry.transitive)
-    if (Object.keys(transitive.installScripts).length > 0 || transitive.gypfile)
+  for (const transitive of registry.transitive) {
+    const runsAtInstall = Object.keys(transitive.installScripts).length > 0 || transitive.gypfile;
+
+    const alreadyRan = transitive.replaced.some(
+      (previous) =>
+        sameScripts(previous.installScripts, transitive.installScripts) &&
+        (previous.gypfile || !transitive.gypfile),
+    );
+
+    if (runsAtInstall && !alreadyRan)
       problems.push(
         fail(
           "escalate",
           `the update adds ${transitive.name}@${transitive.version}, which runs code at install`,
         ),
       );
+  }
 
   let addsTransitive = false;
 
@@ -582,7 +591,13 @@ function transitiveInstallProblems(
 
       addsTransitive = true;
 
-      if (entry.hasInstallScript === true)
+      // A replaced version that also had an install script leaves the comparison to the registry
+      // check above, which sees the scripts themselves.
+      const replacesInstaller = lockfile.removed.some(
+        (removed) => removed.name === entry.name && removed.hasInstallScript === true,
+      );
+
+      if (entry.hasInstallScript === true && !replacesInstaller)
         problems.push(
           fail(
             "escalate",
@@ -600,6 +615,15 @@ function transitiveInstallProblems(
     );
 
   return problems;
+}
+
+function sameScripts(a: Record<string, string>, b: Record<string, string>): boolean {
+  const names = Object.keys(a);
+
+  return (
+    names.length === Object.keys(b).length &&
+    names.every((name) => Object.hasOwn(b, name) && a[name] === b[name])
+  );
 }
 
 const HOUR_MS = 3_600_000;
