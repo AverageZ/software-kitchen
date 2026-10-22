@@ -6,25 +6,39 @@ One step at a time. Don't start the next step until the current one runs boringl
 
 - [x] **1. Skeleton.** TypeScript repo, Mastra installed, a hello-world workflow.
   - Done when: `mastra dev` runs it from Studio.
-- [ ] **2. Intake.** CLI command takes a GitHub PR URL and stores the Input verbatim.
+- [x] **2. Intake.** CLI command takes a GitHub PR URL and stores the Input verbatim.
   - Done when: running it twice stores one Input.
-- [ ] **3. WorkItem.** Turn an Input into a WorkItem by hand (recipe name passed as a flag).
+- [x] **3. WorkItem.** Turn an Input into a WorkItem by hand (recipe name passed as a flag).
   - Done when: WorkItem is in the store, linked to its Input.
 
 ## Phase 2: First recipe (Dependabot bump)
 
-- [ ] **4. Code-only recipe.** Check out the PR, install, run tests, post the result as a PR comment. No merging.
+- [x] **4. Code-only recipe.** Check out the PR, install, run tests, post the result as a PR comment. No merging.
   - Done when: a real Dependabot PR gets a correct comment.
-- [ ] **5. Limits and waiting.** Wait for CI by suspending; attempt and time limits; park on failure with a reason.
+- [x] **5. Limits and waiting.** Wait for CI by suspending; attempt and time limits; park on failure with a reason.
   - Done when: a failing PR ends up parked, not stuck "running".
 - [ ] **6. Decision stage.** Model rates the bump (structured output). Still no merging; you compare its call to yours.
   - Done when: you've reviewed ~20 calls and trust or reject it.
+  - Built, then narrowed: the model no longer rates bumps. It reads release notes and picks rubric
+    criteria (`kitchen decisions` lists each reading for your review); the evaluator decides what
+    they're worth, and only if they cite collected evidence. Waiting on your reviews of those readings.
 - [ ] **7. Define "safe".** Write the rule (semver level, tests, changelog, package allowlist?). Turn on auto-merge for that rule only.
   - Done when: rule is written down and one PR merges unattended.
+  - Built: the safety assessment in `ARCHITECTURE.md` (hard gates, deduction rubric, evidence
+    completeness, versioned policy), observation mode by default, `kitchen merge` as a separate
+    GitHub App behind a per-repo `autonomous` policy. Waiting on: `kitchen eval` on your repos to
+    calibrate, a merge app, and a first unattended merge.
+
+- [ ] **7a. More sources.** The same recipe handles GitHub Enterprise PRs and GitLab MRs, and Renovate PRs
+      as well as Dependabot's.
+  - Done when: one work GHES PR and one work GitLab MR each get a correct comment.
+  - Built: the host comes from the URL (`gh`/`glab` logins, no host config); bot logins per host in
+    `config.json`. GitLab MRs and Dependabot PRs are assessed but ineligible for unattended merging
+    under the default policy, which starts with Renovate on GitHub. Waiting on runs against work hosts.
 
 ## Phase 3: Routing
 
-- [ ] **8. Triage + Router.** Model proposes a recipe; plain rules decide.
+- [x] **8. Triage + Router.** Model proposes a recipe; plain rules decide.
   - Done when: a Dependabot PR reaches step 4's recipe with no flags.
 
 ## Phase 4: Agent work
